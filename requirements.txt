@@ -1,0 +1,11 @@
+psycopg[binary]
+pydantic
+ffmpeg-python
+scenedetect
+Pillow
+imagehash
+opencv-python
+openai
+python-dotenv
+fastapi
+uvicorn
