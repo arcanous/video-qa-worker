@@ -45,7 +45,22 @@ def analyze_frame_with_vision(frame_path: str, video_id: str) -> Dict[str, Any]:
         with open(frame_path, 'rb') as image_file:
             base64_image = base64.b64encode(image_file.read()).decode('utf-8')
         
-        # Create structured output schema
+        # Create structured output schema with additionalProperties: false
+        base_schema = VisionAnalysis.model_json_schema()
+        
+        # Add additionalProperties: false to all object definitions
+        def add_additional_properties_false(schema_part):
+            if isinstance(schema_part, dict):
+                if schema_part.get("type") == "object":
+                    schema_part["additionalProperties"] = False
+                for key, value in schema_part.items():
+                    add_additional_properties_false(value)
+            elif isinstance(schema_part, list):
+                for item in schema_part:
+                    add_additional_properties_false(item)
+        
+        add_additional_properties_false(base_schema)
+        
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
@@ -75,10 +90,7 @@ Be thorough and accurate in your analysis."""
                 "type": "json_schema",
                 "json_schema": {
                     "name": "vision_analysis",
-                    "schema": {
-                        **VisionAnalysis.model_json_schema(),
-                        "additionalProperties": False
-                    },
+                    "schema": base_schema,
                     "strict": True
                 }
             },
