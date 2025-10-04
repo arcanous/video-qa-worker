@@ -75,7 +75,10 @@ Be thorough and accurate in your analysis."""
                 "type": "json_schema",
                 "json_schema": {
                     "name": "vision_analysis",
-                    "schema": VisionAnalysis.model_json_schema(),
+                    "schema": {
+                        **VisionAnalysis.model_json_schema(),
+                        "additionalProperties": False
+                    },
                     "strict": True
                 }
             },

@@ -27,9 +27,7 @@ def detect_scenes(video_path: str, video_id: str) -> List[Dict[str, Any]]:
         video = open_video(video_path)  # returns a VideoStream
         scene_manager = SceneManager()
 
-        # Downscale for performance (replaces VideoManager.set_downscale_factor()).
-        # See: SceneManager.downscale property.
-        scene_manager.downscale = 2
+        # Let auto_downscale handle performance optimization
 
         # Add detector – no video_manager arg in 0.6+.
         scene_manager.add_detector(AdaptiveDetector())

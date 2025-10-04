@@ -1,4 +1,5 @@
 import os
+import json
 import psycopg
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
@@ -33,13 +34,25 @@ class Database:
             raise
     
     def _bootstrap_schema(self):
-        """Validate schema compatibility - schema is managed by docker/initdb"""
+        """Validate schema compatibility and run migrations"""
         with self.pool.connection() as conn:
             with conn.cursor() as cur:
                 # Just verify pgvector extension exists
                 cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+                
+                # Migrate phash column from BIGINT to TEXT if needed
+                cur.execute("""
+                    SELECT data_type FROM information_schema.columns 
+                    WHERE table_name = 'frames' AND column_name = 'phash'
+                """)
+                result = cur.fetchone()
+                if result and result[0] == 'bigint':
+                    logger.info("Migrating phash column from BIGINT to TEXT")
+                    cur.execute("ALTER TABLE frames ALTER COLUMN phash TYPE TEXT;")
+                    logger.info("Successfully migrated phash column to TEXT")
+                
                 conn.commit()
-                logger.info("Database schema validated")
+                logger.info("Database schema validated and migrated")
     
     def claim_job(self) -> Optional[Dict[str, Any]]:
         """Atomically claim a pending job and set video status to processing"""
@@ -131,14 +144,8 @@ class Database:
                     scene_idx = frame['scene_idx']
                     scene_id = scene_map.get(scene_idx)
                     if scene_id:
-                        # Convert phash from hex string to bigint
-                        phash_value = None
-                        if frame.get('phash'):
-                            try:
-                                phash_value = int(frame['phash'], 16)
-                            except ValueError:
-                                logger.warning(f"Invalid phash format for frame {frame_id}: {frame['phash']}")
-                                phash_value = None
+                        # Store phash as TEXT (no conversion needed)
+                        phash_value = frame.get('phash', '')
                         
                         frame_data.append((
                             frame_id, scene_id, frame.get('timestamp', 0.0),
@@ -205,7 +212,7 @@ class Database:
                     INSERT INTO frame_captions (id, frame_id, caption, entities)
                     VALUES (%s, %s, %s, %s)
                     RETURNING id
-                """, (caption_id, frame_id, caption, entities))
+                """, (caption_id, frame_id, caption, json.dumps(entities)))
                 result = cur.fetchone()
                 conn.commit()
                 return result[0] if result else None
