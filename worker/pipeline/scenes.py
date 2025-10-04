@@ -21,8 +21,11 @@ def detect_scenes(video_path: str, video_id: str) -> List[Dict[str, Any]]:
         video_manager = VideoManager([video_path])
         scene_manager = SceneManager()
         
-        # Add adaptive detector
-        scene_manager.add_detector(AdaptiveDetector())
+        # Add adaptive detector with video_manager parameter
+        scene_manager.add_detector(AdaptiveDetector(video_manager))
+        
+        # Set downscale factor for performance
+        video_manager.set_downscale_factor(2)
         
         # Start video manager
         video_manager.start()
