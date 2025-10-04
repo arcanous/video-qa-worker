@@ -94,6 +94,7 @@ class Database:
         with self.pool.connection() as conn:
             with conn.cursor(row_factory=dict_row) as cur:
                 try:
+                    # Try storedPath column first (case-insensitive)
                     cur.execute("SELECT storedPath FROM videos WHERE id = %s", (video_id,))
                     result = cur.fetchone()
                     if result and result.get('storedpath'):
@@ -169,16 +170,29 @@ class Database:
                     scene_idx = frame['scene_idx']
                     scene_id = scene_map.get(scene_idx)
                     if scene_id:
+                        # Convert phash from hex string to bigint
+                        phash_value = None
+                        if frame.get('phash'):
+                            try:
+                                phash_value = int(frame['phash'], 16)
+                            except ValueError:
+                                logger.warning(f"Invalid phash format for frame {frame_id}: {frame['phash']}")
+                                phash_value = None
+                        
                         frame_data.append((
                             frame_id, scene_id, frame.get('timestamp', 0.0),
-                            frame['path'], int(frame['phash'], 16) if frame['phash'] else None
+                            frame['path'], phash_value
                         ))
                 
-                cur.executemany("""
-                    INSERT INTO frames (id, scene_id, t_frame, path, phash)
-                    VALUES (%s, %s, %s, %s, %s)
-                """, frame_data)
-                conn.commit()
+                if frame_data:
+                    cur.executemany("""
+                        INSERT INTO frames (id, scene_id, t_frame, path, phash)
+                        VALUES (%s, %s, %s, %s, %s)
+                    """, frame_data)
+                    conn.commit()
+                    logger.info(f"Inserted {len(frame_data)} frames for video {video_id}")
+                else:
+                    logger.warning(f"No frames to insert for video {video_id}")
     
     def insert_transcript_segments(self, video_id: str, segments: list):
         """Insert transcript segments"""

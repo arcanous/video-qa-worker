@@ -15,7 +15,7 @@ from .pipeline.scenes import detect_scenes
 from .pipeline.frames import extract_scene_frames
 from .pipeline.vision import batch_analyze_frames
 from .pipeline.embed import embed_transcript_by_scenes, embed_frame_captions
-from .util import resolve_video_path
+from .pipeline.util import resolve_video_path
 
 logger = logging.getLogger("video_worker")
 
@@ -36,12 +36,18 @@ class VideoWorker:
         log_level = os.getenv("LOG_LEVEL", "INFO")
         setup_logging(log_level)
         
-        # Initialize database
-        database_url = os.getenv("DATABASE_URL")
-        if not database_url:
-            raise Exception("DATABASE_URL environment variable is required")
+        # Check required environment variables
+        required_env_vars = {
+            "DATABASE_URL": os.getenv("DATABASE_URL"),
+            "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY")
+        }
         
-        self.db = Database(database_url)
+        missing_vars = [var for var, value in required_env_vars.items() if not value]
+        if missing_vars:
+            raise Exception(f"Missing required environment variables: {', '.join(missing_vars)}")
+        
+        # Initialize database
+        self.db = Database(required_env_vars["DATABASE_URL"])
         self.db.connect()
         
         # Start health server if enabled

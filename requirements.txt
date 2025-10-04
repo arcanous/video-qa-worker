@@ -1,10 +1,10 @@
 psycopg[binary]
 pydantic
 ffmpeg-python
-scenedetect
+scenedetect==0.5.6
 Pillow
 imagehash
-opencv-python
+opencv-python-headless
 openai
 python-dotenv
 fastapi
