@@ -14,8 +14,6 @@ ENV PYTHONUNBUFFERED=1
 # --- traceability (OCI labels) ---
 ARG VERSION=0.0.0
 ARG VCS_REF=dev
-LABEL org.opencontainers.image.title="videoqa-worker" \
-      org.opencontainers.image.version="${VERSION}" \
-      org.opencontainers.image.revision="${VCS_REF}"
+LABEL org.opencontainers.image.title="videoqa-worker"
 
 CMD ["python","-m","worker.run"]

@@ -1,6 +1,7 @@
 import os
 import psycopg
 from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
 from typing import Optional, Dict, Any
 import logging
 
@@ -15,7 +16,7 @@ class Database:
     def connect(self):
         """Initialize connection pool"""
         try:
-            self.pool = psycopg.pool.ConnectionPool(
+            self.pool = ConnectionPool(
                 self.database_url,
                 min_size=1,
                 max_size=5,
