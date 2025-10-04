@@ -2,16 +2,60 @@ import os
 import cv2
 import ffmpeg
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from PIL import Image
 from .util import get_frames_dir, generate_phash, dedupe_frames_by_phash, clean_filename
 
 logger = logging.getLogger("video_worker")
 
 
-def extract_scene_frames(video_path: str, scenes: List[Dict[str, Any]], video_id: str) -> List[Dict[str, Any]]:
+def select_scenes_for_frames(scenes: List[Dict[str, Any]], max_frames: int) -> List[Dict[str, Any]]:
+    """
+    Intelligently select scenes for frame extraction.
+    
+    Always includes first and last scene, then distributes remaining
+    frames evenly across the video duration.
+    
+    Args:
+        scenes: List of all scenes
+        max_frames: Maximum number of scenes to select
+        
+    Returns:
+        List of selected scenes
+    """
+    if len(scenes) <= max_frames:
+        return scenes
+    
+    # Always include first and last scene
+    selected = [scenes[0], scenes[-1]]
+    remaining = max_frames - 2
+    
+    if remaining <= 0:
+        return selected
+    
+    # Distribute remaining frames evenly across duration
+    step = len(scenes) / (remaining + 1)
+    for i in range(1, remaining + 1):
+        idx = int(i * step)
+        if idx != 0 and idx != len(scenes) - 1:  # Don't duplicate first/last
+            selected.append(scenes[idx])
+    
+    # Sort by scene index to maintain order
+    selected.sort(key=lambda s: s['idx'])
+    
+    logger.info(f"Selected scenes: {[s['idx'] for s in selected]} from {len(scenes)} total scenes")
+    return selected
+
+
+def extract_scene_frames(video_path: str, scenes: List[Dict[str, Any]], video_id: str, max_frames: Optional[int] = None) -> List[Dict[str, Any]]:
     """
     Extract midpoint frames from each scene and deduplicate by perceptual hash
+    
+    Args:
+        video_path: Path to the video file
+        scenes: List of scene dictionaries
+        video_id: ID of the video being processed
+        max_frames: Maximum number of frames to extract (None for all scenes)
     
     Returns:
         List of frame dictionaries with scene_idx, phash, path
@@ -19,6 +63,11 @@ def extract_scene_frames(video_path: str, scenes: List[Dict[str, Any]], video_id
     try:
         frames_dir = get_frames_dir(video_id)
         frames = []
+        
+        # Apply frame limit if specified
+        if max_frames is not None and len(scenes) > max_frames:
+            scenes = select_scenes_for_frames(scenes, max_frames)
+            logger.info(f"Selected {len(scenes)} scenes from {len(scenes)} for video {video_id} (max_frames={max_frames})")
         
         logger.info(f"Extracting frames for video {video_id}: {len(scenes)} scenes")
         
