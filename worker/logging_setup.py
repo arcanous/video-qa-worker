@@ -1,11 +1,12 @@
 import logging
 import os
+import traceback
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 
 def setup_logging(log_level: str = "INFO") -> logging.Logger:
-    """Setup rotating file logger to /app/data/worker/log.log"""
+    """Setup rotating file logger to /app/data/worker/log.log with enhanced error details"""
     
     # Ensure log directory exists
     log_dir = Path("/app/data/worker")
@@ -27,9 +28,9 @@ def setup_logging(log_level: str = "INFO") -> logging.Logger:
         backupCount=3
     )
     
-    # Create formatter
+    # Create enhanced formatter with filename and line number
     formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        '%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s'
     )
     handler.setFormatter(formatter)
     
@@ -43,3 +44,8 @@ def setup_logging(log_level: str = "INFO") -> logging.Logger:
     
     logger.info(f"Logging initialized. Log file: {log_file}")
     return logger
+
+
+def log_exception(logger: logging.Logger, message: str, exc_info: bool = True):
+    """Log an exception with full stack trace"""
+    logger.error(f"{message}\n{traceback.format_exc()}", exc_info=exc_info)

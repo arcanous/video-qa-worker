@@ -7,7 +7,7 @@ from typing import Optional
 from threading import Thread
 
 from .db import Database
-from .logging_setup import setup_logging
+from .logging_setup import setup_logging, log_exception
 from .http_server import start_health_server
 from .pipeline.normalize import normalize_video, validate_video_file
 from .pipeline.transcribe import transcribe_audio
@@ -154,7 +154,7 @@ class VideoWorker:
             
         except Exception as e:
             error_msg = f"Pipeline failed for video {video_id}: {str(e)}"
-            logger.error(error_msg)
+            log_exception(logger, error_msg)
             
             # Mark job as failed
             self.db.fail_job(job_id, error_msg)
@@ -181,7 +181,7 @@ class VideoWorker:
             return success
             
         except Exception as e:
-            logger.error(f"Error in worker loop: {str(e)}")
+            log_exception(logger, f"Error in worker loop: {str(e)}")
             return False
     
     def run(self):
@@ -207,7 +207,7 @@ class VideoWorker:
                 logger.info("Received interrupt signal, shutting down...")
                 break
             except Exception as e:
-                logger.error(f"Unexpected error in worker loop: {str(e)}")
+                log_exception(logger, f"Unexpected error in worker loop: {str(e)}")
                 # Use backoff for errors too
                 time.sleep(self.backoff_interval / 1000.0)
                 self.backoff_interval = min(self.backoff_interval * 1.5, self.max_backoff)
@@ -241,7 +241,7 @@ def main():
         worker.initialize()
         worker.run()
     except Exception as e:
-        logger.error(f"Worker failed to start: {str(e)}")
+        log_exception(logger, f"Worker failed to start: {str(e)}")
         sys.exit(1)
     finally:
         worker.stop()

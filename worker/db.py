@@ -4,6 +4,7 @@ from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 from typing import Optional, Dict, Any
 import logging
+from .logging_setup import log_exception
 
 logger = logging.getLogger("video_worker")
 
@@ -28,7 +29,7 @@ class Database:
             logger.info("Database connection pool initialized")
             self._bootstrap_schema()
         except Exception as e:
-            logger.error(f"Failed to connect to database: {e}")
+            log_exception(logger, f"Failed to connect to database: {e}")
             raise
     
     def _bootstrap_schema(self):
@@ -81,7 +82,7 @@ class Database:
                     return None
                     
                 except Exception as e:
-                    logger.error(f"Error getting video path for {video_id}: {e}")
+                    log_exception(logger, f"Error getting video path for {video_id}: {e}")
                     return None
     
     def update_video_normalized(self, video_id: str, normalized_path: str, duration_sec: float):

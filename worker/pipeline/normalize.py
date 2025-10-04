@@ -3,6 +3,7 @@ import ffmpeg
 import logging
 from typing import Tuple, Optional
 from .util import get_video_output_dir, ensure_dir
+from ..logging_setup import log_exception
 
 logger = logging.getLogger("video_worker")
 
@@ -78,11 +79,11 @@ def normalize_video(input_path: str, video_id: str) -> Tuple[str, str, float]:
         
     except ffmpeg.Error as e:
         error_msg = f"FFmpeg error normalizing video {video_id}: {e.stderr.decode()}"
-        logger.error(error_msg)
+        log_exception(logger, error_msg)
         raise Exception(error_msg)
     except Exception as e:
         error_msg = f"Error normalizing video {video_id}: {str(e)}"
-        logger.error(error_msg)
+        log_exception(logger, error_msg)
         raise Exception(error_msg)
 
 

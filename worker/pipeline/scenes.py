@@ -6,6 +6,7 @@ from scenedetect import open_video, SceneManager
 from scenedetect.detectors import AdaptiveDetector
 
 from .util import get_video_output_dir
+from ..logging_setup import log_exception
 
 logger = logging.getLogger("video_worker")
 
@@ -53,7 +54,7 @@ def detect_scenes(video_path: str, video_id: str) -> List[Dict[str, Any]]:
 
     except Exception as e:
         error_msg = f"Error detecting scenes for video {video_id}: {e}"
-        logger.error(error_msg)
+        log_exception(logger, error_msg)
         raise Exception(error_msg)
     finally:
         # Help release underlying resources promptly.
