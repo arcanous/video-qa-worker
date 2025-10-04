@@ -50,7 +50,7 @@ class HealthServer:
                             "id": job["id"],
                             "video_id": job["video_id"],
                             "created_at": job["created_at"].isoformat() if job["created_at"] else None,
-                            "stored_path": job["storedpath"]
+                            "original_path": job["original_path"]
                         }
                         for job in jobs
                     ]

@@ -6,7 +6,7 @@ from .util import chunk_text_by_tokens
 logger = logging.getLogger("video_worker")
 
 
-def generate_embeddings(text: str, video_id: int, model: str = "text-embedding-3-small") -> List[float]:
+def generate_embeddings(text: str, video_id: str, model: str = "text-embedding-3-small") -> List[float]:
     """
     Generate embeddings for text using OpenAI
     
@@ -35,7 +35,7 @@ def generate_embeddings(text: str, video_id: int, model: str = "text-embedding-3
         raise Exception(error_msg)
 
 
-def embed_transcript_segments(segments: List[Dict[str, Any]], video_id: int) -> List[Dict[str, Any]]:
+def embed_transcript_segments(segments: List[Dict[str, Any]], video_id: str) -> List[Dict[str, Any]]:
     """
     Generate embeddings for transcript segments
     
@@ -72,7 +72,7 @@ def embed_transcript_segments(segments: List[Dict[str, Any]], video_id: int) -> 
         raise Exception(error_msg)
 
 
-def embed_transcript_by_scenes(segments: List[Dict[str, Any]], scenes: List[Dict[str, Any]], video_id: int) -> List[Dict[str, Any]]:
+def embed_transcript_by_scenes(segments: List[Dict[str, Any]], scenes: List[Dict[str, Any]], video_id: str) -> List[Dict[str, Any]]:
     """
     Generate embeddings for transcript chunks grouped by scenes
     
@@ -129,7 +129,7 @@ def embed_transcript_by_scenes(segments: List[Dict[str, Any]], scenes: List[Dict
         raise Exception(error_msg)
 
 
-def embed_frame_captions(frame_analyses: List[Dict[str, Any]], video_id: int) -> List[Dict[str, Any]]:
+def embed_frame_captions(frame_analyses: List[Dict[str, Any]], video_id: str) -> List[Dict[str, Any]]:
     """
     Generate embeddings for frame captions and analysis
     
@@ -189,7 +189,7 @@ def embed_frame_captions(frame_analyses: List[Dict[str, Any]], video_id: int) ->
         raise Exception(error_msg)
 
 
-def batch_embed_texts(texts: List[str], video_id: int, batch_size: int = 10) -> List[List[float]]:
+def batch_embed_texts(texts: List[str], video_id: str, batch_size: int = 10) -> List[List[float]]:
     """
     Generate embeddings for multiple texts in batches
     

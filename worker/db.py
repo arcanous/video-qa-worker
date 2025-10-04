@@ -242,7 +242,7 @@ class Database:
         with self.pool.connection() as conn:
             with conn.cursor(row_factory=dict_row) as cur:
                 cur.execute("""
-                    SELECT j.id, j.video_id, j.created_at, v.storedPath
+                    SELECT j.id, j.video_id, j.created_at, v.original_path
                     FROM jobs j
                     JOIN videos v ON j.video_id = v.id
                     WHERE j.status = 'pending'

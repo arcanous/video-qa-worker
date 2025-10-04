@@ -7,7 +7,7 @@ from .util import get_video_output_dir
 logger = logging.getLogger("video_worker")
 
 
-def detect_scenes(video_path: str, video_id: int) -> List[Dict[str, Any]]:
+def detect_scenes(video_path: str, video_id: str) -> List[Dict[str, Any]]:
     """
     Detect scene boundaries using PySceneDetect AdaptiveDetector
     
@@ -55,7 +55,7 @@ def detect_scenes(video_path: str, video_id: int) -> List[Dict[str, Any]]:
         raise Exception(error_msg)
 
 
-def export_scene_clips(video_path: str, scenes: List[Dict[str, Any]], video_id: int, max_duration: float = 10.0) -> List[str]:
+def export_scene_clips(video_path: str, scenes: List[Dict[str, Any]], video_id: str, max_duration: float = 10.0) -> List[str]:
     """
     Export short clips for each scene (optional, for debugging/preview)
     

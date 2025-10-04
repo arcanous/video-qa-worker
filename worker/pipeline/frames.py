@@ -9,7 +9,7 @@ from .util import get_frames_dir, generate_phash, dedupe_frames_by_phash, clean_
 logger = logging.getLogger("video_worker")
 
 
-def extract_scene_frames(video_path: str, scenes: List[Dict[str, Any]], video_id: int) -> List[Dict[str, Any]]:
+def extract_scene_frames(video_path: str, scenes: List[Dict[str, Any]], video_id: str) -> List[Dict[str, Any]]:
     """
     Extract midpoint frames from each scene and deduplicate by perceptual hash
     
@@ -75,7 +75,7 @@ def extract_scene_frames(video_path: str, scenes: List[Dict[str, Any]], video_id
         raise Exception(error_msg)
 
 
-def extract_frames_by_scene_filter(video_path: str, video_id: int) -> List[Dict[str, Any]]:
+def extract_frames_by_scene_filter(video_path: str, video_id: str) -> List[Dict[str, Any]]:
     """
     Alternative method: Use FFmpeg scene filter to detect and extract frames
     This is more robust but requires more processing

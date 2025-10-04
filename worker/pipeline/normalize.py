@@ -7,7 +7,7 @@ from .util import get_video_output_dir, ensure_dir
 logger = logging.getLogger("video_worker")
 
 
-def normalize_video(input_path: str, video_id: int) -> Tuple[str, str, float]:
+def normalize_video(input_path: str, video_id: str) -> Tuple[str, str, float]:
     """
     Normalize video to 720p, 30fps and extract audio as WAV
     
@@ -53,7 +53,6 @@ def normalize_video(input_path: str, video_id: int) -> Tuple[str, str, float]:
             .input(input_path)
             .audio
             .filter('aresample', 16000)  # 16kHz
-            .filter('ac', 1)              # mono
             .output(
                 audio_path,
                 acodec='pcm_s16le',       # 16-bit PCM

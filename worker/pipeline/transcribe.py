@@ -8,7 +8,7 @@ from .util import get_subs_dir, format_timecode
 logger = logging.getLogger("video_worker")
 
 
-def transcribe_audio(audio_path: str, video_id: int) -> List[Dict[str, Any]]:
+def transcribe_audio(audio_path: str, video_id: str) -> List[Dict[str, Any]]:
     """
     Transcribe audio using OpenAI Whisper and return segments
     
@@ -58,7 +58,7 @@ def transcribe_audio(audio_path: str, video_id: int) -> List[Dict[str, Any]]:
         raise Exception(error_msg)
 
 
-def save_srt_file(segments: List[Dict[str, Any]], video_id: int) -> str:
+def save_srt_file(segments: List[Dict[str, Any]], video_id: str) -> str:
     """Save segments as SRT subtitle file"""
     subs_dir = get_subs_dir()
     srt_path = os.path.join(subs_dir, f"{video_id}.srt")

@@ -10,7 +10,7 @@ def get_data_dir() -> str:
     return os.getenv("DATA_DIR", "/app/data")
 
 
-def resolve_video_path(stored_path: str, video_id: int) -> str:
+def resolve_video_path(stored_path: str, video_id: str) -> str:
     """Resolve storedPath to absolute path under DATA_DIR"""
     data_dir = get_data_dir()
     
@@ -22,13 +22,13 @@ def resolve_video_path(stored_path: str, video_id: int) -> str:
     return os.path.join(data_dir, stored_path.lstrip("/"))
 
 
-def get_video_output_dir(video_id: int) -> str:
+def get_video_output_dir(video_id: str) -> str:
     """Get output directory for a video"""
     data_dir = get_data_dir()
     return os.path.join(data_dir, "processed", str(video_id))
 
 
-def get_frames_dir(video_id: int) -> str:
+def get_frames_dir(video_id: str) -> str:
     """Get frames directory for a video"""
     data_dir = get_data_dir()
     frames_dir = os.path.join(data_dir, "frames", str(video_id))

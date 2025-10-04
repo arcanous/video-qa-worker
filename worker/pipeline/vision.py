@@ -29,7 +29,7 @@ class VisionAnalysis(BaseModel):
     text_on_screen: List[TextOnScreen] = Field(description="Text visible on screen")
 
 
-def analyze_frame_with_vision(frame_path: str, video_id: int) -> Dict[str, Any]:
+def analyze_frame_with_vision(frame_path: str, video_id: str) -> Dict[str, Any]:
     """
     Analyze frame using OpenAI GPT-4o Vision with structured outputs
     
@@ -124,7 +124,7 @@ Be thorough and accurate in your analysis."""
         }
 
 
-def batch_analyze_frames(frames: List[Dict[str, Any]], video_id: int) -> List[Dict[str, Any]]:
+def batch_analyze_frames(frames: List[Dict[str, Any]], video_id: str) -> List[Dict[str, Any]]:
     """
     Analyze multiple frames and return results with frame metadata
     
