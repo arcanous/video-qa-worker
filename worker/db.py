@@ -32,41 +32,16 @@ class Database:
             raise
     
     def _bootstrap_schema(self):
-        """Validate schema compatibility and add missing columns if needed"""
+        """Validate schema compatibility - schema is managed by docker/initdb"""
         with self.pool.connection() as conn:
             with conn.cursor() as cur:
-                # Enable pgvector extension
+                # Just verify pgvector extension exists
                 cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
-                
-                # Add missing columns to videos table if they don't exist
-                cur.execute("""
-                    ALTER TABLE videos 
-                    ADD COLUMN IF NOT EXISTS normalized_path TEXT,
-                    ADD COLUMN IF NOT EXISTS duration_sec INT;
-                """)
-                
-                # Add missing storedPath column if it doesn't exist
-                cur.execute("""
-                    ALTER TABLE videos 
-                    ADD COLUMN IF NOT EXISTS storedPath TEXT;
-                """)
-                
-                # Create HNSW indexes for embeddings if they don't exist
-                cur.execute("""
-                    CREATE INDEX IF NOT EXISTS transcript_segments_embedding_hnsw
-                    ON transcript_segments USING hnsw (embedding vector_cosine_ops);
-                """)
-                
-                cur.execute("""
-                    CREATE INDEX IF NOT EXISTS frame_captions_embedding_hnsw
-                    ON frame_captions USING hnsw (embedding vector_cosine_ops);
-                """)
-                
                 conn.commit()
-                logger.info("Database schema validated and updated")
+                logger.info("Database schema validated")
     
     def claim_job(self) -> Optional[Dict[str, Any]]:
-        """Atomically claim a pending job"""
+        """Atomically claim a pending job and set video status to processing"""
         with self.pool.connection() as conn:
             with conn.cursor(row_factory=dict_row) as cur:
                 cur.execute("""
@@ -86,40 +61,23 @@ class Database:
                 """)
                 result = cur.fetchone()
                 if result:
+                    # Set video status to processing
+                    cur.execute("UPDATE videos SET status = 'processing' WHERE id = %s", (result['video_id'],))
                     conn.commit()
                     logger.info(f"Claimed job {result['id']} for video {result['video_id']}")
                 return result
     
     def get_video_path(self, video_id: str) -> Optional[str]:
-        """Get storedPath for a video, with fallback handling"""
+        """Get original_path for a video"""
         with self.pool.connection() as conn:
             with conn.cursor(row_factory=dict_row) as cur:
                 try:
-                    # Try storedPath column first (case-insensitive)
-                    cur.execute("SELECT storedPath FROM videos WHERE id = %s", (video_id,))
+                    cur.execute("SELECT original_path FROM videos WHERE id = %s", (video_id,))
                     result = cur.fetchone()
-                    if result and result.get('storedpath'):
-                        return result['storedpath']
+                    if result and result.get('original_path'):
+                        return result['original_path']
                     
-                    # Fallback: try to find any path-related column
-                    cur.execute("""
-                        SELECT column_name 
-                        FROM information_schema.columns 
-                        WHERE table_name = 'videos' 
-                        AND column_name LIKE '%path%'
-                    """)
-                    path_columns = [row[0] for row in cur.fetchall()]
-                    
-                    if path_columns:
-                        # Try the first path column found
-                        path_col = path_columns[0]
-                        cur.execute(f"SELECT {path_col} FROM videos WHERE id = %s", (video_id,))
-                        result = cur.fetchone()
-                        if result and result.get(path_col):
-                            logger.warning(f"Using fallback column {path_col} for video {video_id}")
-                            return result[path_col]
-                    
-                    logger.error(f"No path found for video {video_id}")
+                    logger.error(f"No original_path found for video {video_id}")
                     return None
                     
                 except Exception as e:
@@ -138,7 +96,7 @@ class Database:
                 conn.commit()
     
     def insert_scenes(self, video_id: str, scenes: list):
-        """Insert scene boundaries"""
+        """Insert scene boundaries with idempotency"""
         with self.pool.connection() as conn:
             with conn.cursor() as cur:
                 # Generate scene IDs and insert
@@ -153,6 +111,7 @@ class Database:
                 cur.executemany("""
                     INSERT INTO scenes (id, video_id, idx, t_start, t_end)
                     VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (video_id, idx) DO NOTHING
                 """, scene_data)
                 conn.commit()
     
@@ -189,6 +148,7 @@ class Database:
                     cur.executemany("""
                         INSERT INTO frames (id, scene_id, t_frame, path, phash)
                         VALUES (%s, %s, %s, %s, %s)
+                        ON CONFLICT (id) DO NOTHING
                     """, frame_data)
                     conn.commit()
                     logger.info(f"Inserted {len(frame_data)} frames for video {video_id}")
@@ -196,7 +156,7 @@ class Database:
                     logger.warning(f"No frames to insert for video {video_id}")
     
     def insert_transcript_segments(self, video_id: str, segments: list):
-        """Insert transcript segments"""
+        """Insert transcript segments with idempotency"""
         with self.pool.connection() as conn:
             with conn.cursor() as cur:
                 # Generate segment IDs and insert
@@ -211,6 +171,7 @@ class Database:
                 cur.executemany("""
                     INSERT INTO transcript_segments (id, video_id, t_start, t_end, text)
                     VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (video_id, t_start, t_end) DO NOTHING
                 """, segment_data)
                 conn.commit()
     

@@ -89,7 +89,8 @@ class HealthServer:
                                 COUNT(f.id) as total_frames,
                                 COUNT(fc.id) as total_captions
                             FROM transcript_segments ts
-                            LEFT JOIN frames f ON ts.video_id = f.video_id
+                            LEFT JOIN scenes s ON ts.video_id = s.video_id
+                            LEFT JOIN frames f ON s.id = f.scene_id
                             LEFT JOIN frame_captions fc ON f.id = fc.frame_id
                         """)
                         stats_row = cur.fetchone()
