@@ -291,11 +291,3 @@ docker-compose exec worker python -c "from worker.db import Database; db = Datab
 # Test OpenAI API
 curl -H "Authorization: Bearer $OPENAI_API_KEY" https://api.openai.com/v1/models
 ```
-
-## See Also
-
-- [PIPELINE.md](./PIPELINE.md) - Detailed pipeline documentation
-- [DATA_MODEL.md](./DATA_MODEL.md) - Database schema documentation
-- [QUICKSTART.md](./QUICKSTART.md) - 5-minute setup guide
-- [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) - Common issues and solutions
-- [../video-qa/README.md](../video-qa/README.md) - Frontend documentation

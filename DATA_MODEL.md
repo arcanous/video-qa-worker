@@ -338,10 +338,3 @@ UPDATE videos SET new_field = 'computed_value' WHERE new_field = 'default_value'
 -- Add index (non-blocking)
 CREATE INDEX CONCURRENTLY videos_new_field_idx ON videos(new_field);
 ```
-
-## See Also
-
-- [README.md](./README.md) - Main worker documentation
-- [PIPELINE.md](./PIPELINE.md) - Pipeline stage details
-- [QUICKSTART.md](./QUICKSTART.md) - 5-minute setup guide
-- [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) - Common issues and solutions

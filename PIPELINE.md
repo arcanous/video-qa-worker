@@ -371,9 +371,3 @@ def process_video(job_id, video_id):
 - **Storage**: Disk space and file access
 - **Worker**: Job processing status
 
-## See Also
-
-- [README.md](./README.md) - Main worker documentation
-- [DATA_MODEL.md](./DATA_MODEL.md) - Database schema details
-- [QUICKSTART.md](./QUICKSTART.md) - 5-minute setup guide
-- [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) - Common issues and solutions
