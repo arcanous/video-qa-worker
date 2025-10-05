@@ -28,12 +28,12 @@ class Database:
                 }
             )
             logger.info("Database connection pool initialized")
-            self._bootstrap_schema()
+            self._validate_and_migrate_schema()
         except Exception as e:
             log_exception(logger, f"Failed to connect to database: {e}")
             raise
     
-    def _bootstrap_schema(self):
+    def _validate_and_migrate_schema(self):
         """Validate schema compatibility and run migrations"""
         with self.pool.connection() as conn:
             with conn.cursor() as cur:

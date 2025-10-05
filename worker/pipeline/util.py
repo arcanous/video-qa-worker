@@ -5,9 +5,16 @@ from typing import List, Dict, Any
 import hashlib
 
 
+# Environment variable constants
+DEFAULT_DATA_DIR = "/app/data"
+DEFAULT_UPLOADS_DIR = "uploads"
+DEFAULT_PROCESSED_DIR = "processed"
+DEFAULT_FRAMES_DIR = "frames"
+DEFAULT_SUBS_DIR = "subs"
+
 def get_data_dir() -> str:
     """Get data directory from environment"""
-    return os.getenv("DATA_DIR", "/app/data")
+    return os.getenv("DATA_DIR", DEFAULT_DATA_DIR)
 
 
 def resolve_video_path(stored_path: str, video_id: str) -> str:

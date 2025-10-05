@@ -56,25 +56,43 @@ class VideoWorker:
         logger.info("Video worker initialized")
     
     def process_video(self, job_id: int, video_id: int) -> bool:
-        """Process a single video through the complete pipeline"""
+        """
+        Process a video through the complete 6-stage pipeline.
+        
+        Pipeline stages (in order):
+        1. NORMALIZE: Convert to 720p/30fps, extract mono audio
+        2. TRANSCRIBE: Generate transcript segments using Whisper
+        3. SCENES: Detect scene boundaries using PySceneDetect
+        4. FRAMES: Extract representative frames, deduplicate by phash
+        5. VISION: Analyze frames with GPT-4o for captions/entities
+        6. EMBEDDINGS: Generate 1536-dim vectors for search
+        
+        Database coupling:
+        - Reads: videos.original_path
+        - Writes: All tables (scenes, frames, transcript_segments, frame_captions)
+        - Updates: videos.status, videos.normalized_path, videos.duration_sec
+        
+        Returns:
+            True if pipeline completed successfully, False otherwise
+        """
         try:
             logger.info(f"CLAIMED: Processing job {job_id} for video {video_id}")
             
-            # Get video path
+            # Fetch relative path from DB (e.g., "uploads/{id}_{name}.mp4")
             video_path = self.db.get_video_path(video_id)
             if not video_path:
                 raise Exception(f"Video path not found for video {video_id}")
             
-            # Resolve absolute path
+            # Resolve to absolute path using DATA_DIR environment variable
             abs_video_path = resolve_video_path(video_path, video_id)
             
-            # Validate video file
+            # Validate video file exists and is readable
             if not validate_video_file(abs_video_path):
                 raise Exception(f"Invalid video file: {abs_video_path}")
             
             logger.info(f"NORMALIZED: Starting normalization for video {video_id}")
             
-            # Step 1: Normalize video and extract audio
+            # Stage 1: Normalize video and extract audio
             normalized_path, audio_path, duration = normalize_video(abs_video_path, video_id)
             
             # Update video with normalized path and duration
@@ -82,34 +100,34 @@ class VideoWorker:
             
             logger.info(f"TRANSCRIBED: Starting transcription for video {video_id}")
             
-            # Step 2: Transcribe audio
+            # Stage 2: Transcribe audio using OpenAI Whisper
             segments = transcribe_audio(audio_path, video_id)
             
-            # Insert transcript segments
+            # Insert transcript segments with idempotency
             self.db.insert_transcript_segments(video_id, segments)
             
             logger.info(f"SCENES: Starting scene detection for video {video_id}")
             
-            # Step 3: Detect scenes
+            # Stage 3: Detect scene boundaries using PySceneDetect
             scenes = detect_scenes(normalized_path, video_id)
             
-            # Insert scenes
+            # Insert scenes with idempotency
             self.db.insert_scenes(video_id, scenes)
             
             logger.info(f"FRAMES: Starting frame extraction for video {video_id}")
             
-            # Step 4: Extract frames
+            # Stage 4: Extract representative frames and deduplicate
             frames = extract_scene_frames(normalized_path, scenes, video_id)
             
-            # Insert frames
+            # Insert frames with perceptual hashes for deduplication
             self.db.insert_frames(video_id, frames)
             
             logger.info(f"VISION: Starting vision analysis for video {video_id}")
             
-            # Step 5: Analyze frames with vision
+            # Stage 5: Analyze frames with GPT-4o Vision
             frame_analyses = batch_analyze_frames(frames, video_id)
             
-            # Insert frame captions
+            # Insert frame captions with structured output
             caption_ids = []
             for frame_analysis in frame_analyses:
                 caption_json = frame_analysis['analysis']
@@ -121,7 +139,7 @@ class VideoWorker:
             
             logger.info(f"EMBEDDINGS: Starting embedding generation for video {video_id}")
             
-            # Step 6: Generate embeddings
+            # Stage 6: Generate 1536-dimensional embeddings for search
             # Embed transcript by scenes
             scene_chunks = embed_transcript_by_scenes(segments, scenes, video_id)
             
@@ -147,7 +165,7 @@ class VideoWorker:
             
             logger.info(f"READY: Pipeline completed for video {video_id}")
             
-            # Step 7: Mark job as done
+            # Mark job as completed and video as ready
             self.db.complete_job(job_id, video_id)
             
             return True

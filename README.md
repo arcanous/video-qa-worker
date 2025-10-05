@@ -1,102 +1,301 @@
 # Video Worker
 
-A Python worker that processes video files using OpenAI APIs and stores results in PostgreSQL.
+A Python worker that processes video files using OpenAI APIs and stores results in PostgreSQL. The worker implements a 6-stage pipeline that transforms raw video uploads into searchable, AI-analyzed content.
 
-## Features
+## Pipeline Architecture
 
-- Polls PostgreSQL for pending jobs using `FOR UPDATE SKIP LOCKED`
-- Processes videos through a complete pipeline:
-  - Video normalization (720p, 30fps)
-  - Audio transcription (OpenAI Whisper)
-  - Scene detection (PySceneDetect)
-  - Frame extraction with deduplication
-  - Vision analysis (OpenAI GPT-4o)
-  - Embeddings generation (OpenAI text-embedding-3-small)
-- Stores results in PostgreSQL with pgvector support
-- Rotating log files
-- Health check endpoint
+The worker processes videos through a sequential 6-stage pipeline:
+
+```
+Input: uploads/{id}_{name}.mp4
+  │
+  ├─▶ [1. NORMALIZE] → processed/{id}/normalized.mp4
+  │                  → processed/{id}/audio.wav
+  │
+  ├─▶ [2. TRANSCRIBE] → transcript_segments table
+  │                    → subs/{id}.srt
+  │
+  ├─▶ [3. SCENES] → scenes table (t_start, t_end)
+  │
+  ├─▶ [4. FRAMES] → frames/{id}/scene_*.jpg
+  │               → frames table (phash, path)
+  │
+  ├─▶ [5. VISION] → frame_captions table (caption, entities)
+  │
+  └─▶ [6. EMBEDDINGS] → UPDATE embeddings (1536-dim vectors)
+
+Output: video.status = 'ready'
+```
 
 ## Processing Pipeline
 
-1. **Normalize**: Convert video to 720p, 30fps and extract 16kHz mono audio
-2. **Transcribe**: Use OpenAI Whisper to generate transcript segments and SRT files
-3. **Scenes**: Detect scene boundaries using PySceneDetect AdaptiveDetector
-4. **Frames**: Extract midpoint frames from each scene and deduplicate by perceptual hash
-5. **Vision**: Analyze frames with GPT-4o structured outputs for captions, controls, and text
-6. **Embeddings**: Generate 1536-dimensional embeddings for transcripts and frame captions
-7. **Store**: Persist all results to PostgreSQL with HNSW vector indexes
+### Stage 1: Normalize
+**Purpose**: Convert video to standard format and extract audio
+- **Input**: Original video file (any format)
+- **Output**: 720p/30fps video + 16kHz mono audio
+- **Tools**: FFmpeg
+- **Database**: Updates `videos.normalized_path`, `videos.duration_sec`
 
-## Database Schema
+### Stage 2: Transcribe
+**Purpose**: Generate accurate transcript from audio
+- **Input**: 16kHz mono audio file
+- **Output**: Timestamped transcript segments
+- **Tools**: OpenAI Whisper API
+- **Database**: Inserts `transcript_segments` records
+- **Files**: Generates SRT subtitle file
 
-The worker creates/updates these tables:
-- `scenes(id, video_id, idx, t_start, t_end)`
-- `frames(id, video_id, scene_idx, phash, path)`
-- `transcript_segments(id, video_id, t_start, t_end, text, embedding VECTOR(1536))`
-- `frame_captions(id, video_id, frame_id, caption_json JSONB, embedding VECTOR(1536))`
-- Updates `videos.normalized_path` and `videos.duration_sec`
+### Stage 3: Scenes
+**Purpose**: Detect scene boundaries for frame extraction
+- **Input**: Normalized video file
+- **Output**: Scene time boundaries
+- **Tools**: PySceneDetect AdaptiveDetector
+- **Database**: Inserts `scenes` records with `t_start`, `t_end`
+
+### Stage 4: Frames
+**Purpose**: Extract representative frames and deduplicate
+- **Input**: Normalized video + scene boundaries
+- **Output**: Frame images with perceptual hashes
+- **Tools**: FFmpeg + imagehash
+- **Database**: Inserts `frames` records with `phash` for deduplication
+- **Files**: Saves frame images to `frames/{video_id}/`
+
+### Stage 5: Vision
+**Purpose**: Analyze frames with AI vision
+- **Input**: Frame images
+- **Output**: Captions, controls, text detection
+- **Tools**: OpenAI GPT-4o Vision API
+- **Database**: Inserts `frame_captions` records
+- **Features**: Structured output for consistent data
+
+### Stage 6: Embeddings
+**Purpose**: Generate searchable vector embeddings
+- **Input**: Transcript text + frame captions
+- **Output**: 1536-dimensional vectors
+- **Tools**: OpenAI text-embedding-3-small
+- **Database**: Updates embedding columns in `transcript_segments` and `frame_captions`
+
+## Database Coupling
+
+The worker is **tightly coupled** to the PostgreSQL schema:
+
+### Read Operations
+- `videos.original_path` - Input video location
+- `jobs` table - Job queue polling
+- Existing records for idempotency
+
+### Write Operations
+- `scenes` - Scene boundaries
+- `frames` - Extracted frames with hashes
+- `transcript_segments` - Audio transcription
+- `frame_captions` - Vision analysis results
+
+### Update Operations
+- `videos.status` - Processing status
+- `videos.normalized_path` - Processed video location
+- `videos.duration_sec` - Video duration
+- `jobs.status` - Job completion status
+
+### ID Generation Patterns
+The worker follows strict ID patterns for consistency:
+
+```python
+# Scene ID: "{video_id}_scene_{idx:03d}"
+scene_id = f"{video_id}_scene_{i:03d}"
+
+# Frame ID: "{video_id}_frame_{idx:03d}"  
+frame_id = f"{video_id}_frame_{i:03d}"
+
+# Segment ID: "{video_id}_segment_{idx:03d}"
+segment_id = f"{video_id}_segment_{i:03d}"
+
+# Caption ID: "{frame_id}_caption"
+caption_id = f"{frame_id}_caption"
+```
+
+## Job Processing Model
+
+### Polling Mechanism
+- **Interval**: 1.5 seconds (configurable via `WORKER_POLL_MS`)
+- **Strategy**: `FOR UPDATE SKIP LOCKED` for atomic job claiming
+- **Backoff**: Exponential backoff when no jobs available
+- **Retry**: Up to 3 attempts per job (configurable via `WORKER_MAX_ATTEMPTS`)
+
+### Status Flow
+```
+pending → processing → done/failed
+```
+
+### Error Handling
+- **Job Failures**: Marked as `failed` with error message
+- **Video Failures**: Status remains `processing` until retry
+- **Logging**: Comprehensive error logging with stack traces
+- **Recovery**: Jobs can be retried manually
 
 ## Environment Variables
 
-- `DATABASE_URL` - PostgreSQL connection string (required)
-- `OPENAI_API_KEY` - OpenAI API key (required)
-- `DATA_DIR` - Data directory path (default: `/app/data`)
-- `WORKER_POLL_MS` - Polling interval in milliseconds (default: 1500)
-- `WORKER_MAX_ATTEMPTS` - Max retry attempts (default: 3)
-- `LOG_LEVEL` - Logging level (default: INFO)
-- `WORKER_DEV_HTTP` - Enable HTTP endpoints (default: false)
-- `WORKER_HTTP_PORT` - HTTP server port (default: 8000)
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `DATABASE_URL` | ✅ | - | PostgreSQL connection string |
+| `OPENAI_API_KEY` | ✅ | - | OpenAI API key |
+| `DATA_DIR` | ❌ | `/app/data` | Data directory path |
+| `WORKER_POLL_MS` | ❌ | `1500` | Polling interval (milliseconds) |
+| `WORKER_MAX_ATTEMPTS` | ❌ | `3` | Max retry attempts |
+| `LOG_LEVEL` | ❌ | `INFO` | Logging level |
+| `WORKER_DEV_HTTP` | ❌ | `false` | Enable HTTP endpoints |
+| `WORKER_HTTP_PORT` | ❌ | `8000` | HTTP server port |
 
-## Docker Compose Integration
+## HTTP Endpoints (Development)
 
-Add to your docker-compose.yml:
+When `WORKER_DEV_HTTP=true`:
 
+| Endpoint | Method | Purpose | Response |
+|----------|--------|---------|----------|
+| `/healthz` | GET | Health check | `{ok: true, status: "healthy"}` |
+| `/jobs/peek` | GET | View pending jobs | `{pending_jobs: number, jobs: [...]}` |
+| `/stats` | GET | Processing statistics | `{jobs: {...}, videos: {...}, processing: {...}}` |
+
+## Logging
+
+### Log Format
+```
+2024-01-15 10:30:00 - video_worker - INFO - [run.py:75] - CLAIMED: Processing job abc123 for video def456
+```
+
+### Log Levels
+- **CLAIMED**: Job claimed for processing
+- **NORMALIZED**: Video normalization complete
+- **TRANSCRIBED**: Audio transcription complete
+- **SCENES**: Scene detection complete
+- **FRAMES**: Frame extraction complete
+- **VISION**: Vision analysis complete
+- **EMBEDDINGS**: Embedding generation complete
+- **READY**: Pipeline completed successfully
+- **FAILED**: Pipeline failed with error
+
+### Log Files
+- **Location**: `{DATA_DIR}/worker/log.log`
+- **Rotation**: 5MB max size, 3 backup files
+- **Format**: Structured logging with timestamps
+
+## Performance Characteristics
+
+### Processing Times
+| Video Length | Normalize | Transcribe | Scenes | Frames | Vision | Embeddings | Total |
+|--------------|-----------|------------|--------|--------|--------|------------|-------|
+| 1 minute | 5s | 10s | 2s | 3s | 15s | 5s | 40s |
+| 5 minutes | 15s | 30s | 5s | 10s | 60s | 20s | 2.5min |
+| 30 minutes | 60s | 3min | 20s | 45s | 5min | 2min | 12min |
+
+### Resource Usage
+- **CPU**: High during FFmpeg operations and AI API calls
+- **Memory**: Moderate (image processing, embeddings)
+- **Storage**: 2-3x original video size
+- **Network**: OpenAI API calls for transcription and vision
+
+## Development
+
+### Local Development
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Set environment variables
+export DATABASE_URL="postgresql://user:pass@localhost:5432/videoqa"
+export OPENAI_API_KEY="your-key"
+export DATA_DIR="/path/to/data"
+export WORKER_DEV_HTTP=true
+
+# Run worker
+python -m worker.run
+```
+
+### Testing Single Video
+```bash
+# Insert test job
+psql $DATABASE_URL -c "INSERT INTO jobs (id, video_id) VALUES ('test-job', 'test-video');"
+
+# Monitor logs
+tail -f data/worker/log.log
+```
+
+### Debugging
+```bash
+# Check worker health
+curl http://localhost:8000/healthz
+
+# View pending jobs
+curl http://localhost:8000/jobs/peek
+
+# Check processing stats
+curl http://localhost:8000/stats
+```
+
+## Docker Integration
+
+### Dockerfile
+```dockerfile
+FROM python:3.11-slim
+RUN apt-get update && apt-get install -y ffmpeg tesseract-ocr
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY worker ./worker
+CMD ["python", "-m", "worker.run"]
+```
+
+### Docker Compose
 ```yaml
 worker:
-  build: ./video-worker
+  image: videoqa-worker:0.0.17
   environment:
-    - DATABASE_URL=${DATABASE_URL}
+    - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/videoqa
     - OPENAI_API_KEY=${OPENAI_KEY}
     - DATA_DIR=/app/data
-    - WORKER_POLL_MS=1500
-    - WORKER_MAX_ATTEMPTS=3
-    - LOG_LEVEL=INFO
-    - WORKER_DEV_HTTP=true
   volumes:
     - ./data:/app/data
   depends_on:
     - postgres
 ```
 
-## HTTP Endpoints (when WORKER_DEV_HTTP=true)
+## Troubleshooting
 
-- `GET /healthz` - Health check (returns `{ok: true}` if healthy)
-- `GET /jobs/peek` - Show pending jobs (dev only)
-- `GET /stats` - Worker statistics (job counts, processing stats)
+### Common Issues
 
-## Logging
+1. **"Video path not found"**
+   - Check `DATA_DIR` environment variable
+   - Verify file exists at resolved path
+   - Check database `videos.original_path` value
 
-Logs are written to `/app/data/worker/log.log` with rotation:
-- Max file size: 5MB
-- Backup count: 3
-- Log levels: CLAIMED → NORMALIZED → TRANSCRIBED → SCENES → FRAMES → VISION → EMBEDDINGS → READY/FAILED
+2. **"OpenAI API error"**
+   - Verify `OPENAI_API_KEY` is valid
+   - Check API key has sufficient credits
+   - Monitor API rate limits
 
-## Development
+3. **"Database connection failed"**
+   - Check `DATABASE_URL` format
+   - Verify PostgreSQL is running
+   - Check network connectivity
 
-To run locally:
+4. **"FFmpeg not found"**
+   - Ensure FFmpeg is installed in container
+   - Check Dockerfile includes FFmpeg installation
 
+### Debug Commands
 ```bash
-cd video-worker
-pip install -r requirements.txt
-export DATABASE_URL="postgresql://user:pass@localhost:5432/db"
-export OPENAI_API_KEY="your-key"
-export WORKER_DEV_HTTP=true
-python -m worker.run
+# Check worker logs
+docker-compose logs worker
+
+# Check database connection
+docker-compose exec worker python -c "from worker.db import Database; db = Database('$DATABASE_URL'); db.connect()"
+
+# Test OpenAI API
+curl -H "Authorization: Bearer $OPENAI_API_KEY" https://api.openai.com/v1/models
 ```
 
-## Requirements
+## See Also
 
-- Python 3.11+
-- PostgreSQL with pgvector extension
-- FFmpeg
-- OpenAI API key
-- Docker (for containerized deployment)
+- [PIPELINE.md](./PIPELINE.md) - Detailed pipeline documentation
+- [DATA_MODEL.md](./DATA_MODEL.md) - Database schema documentation
+- [QUICKSTART.md](./QUICKSTART.md) - 5-minute setup guide
+- [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) - Common issues and solutions
+- [../video-qa/README.md](../video-qa/README.md) - Frontend documentation
