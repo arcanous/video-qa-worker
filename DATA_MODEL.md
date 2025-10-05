@@ -154,6 +154,25 @@ videos (1) ──→ (many) jobs
 - Index on `frame_id` for frame queries
 - HNSW index on `embedding` for vector search
 
+**Entities JSONB Structure**:
+```json
+{
+  "controls": [
+    {
+      "type": "button",
+      "label": "Start",
+      "position": "center"
+    }
+  ],
+  "text_on_screen": [
+    {
+      "text": "Welcome to the tutorial",
+      "position": "top-left"
+    }
+  ]
+}
+```
+
 ## ID Generation Patterns
 
 The system uses consistent ID patterns for easy debugging and relationship tracking:
@@ -194,6 +213,28 @@ FROM frame_captions
 WHERE embedding <=> query_embedding < 0.8
 ORDER BY embedding <=> query_embedding
 LIMIT 10;
+
+-- Multimodal search combining transcripts and frames
+SELECT 
+  'transcript' as type,
+  ts.t_start,
+  ts.t_end,
+  ts.text as content,
+  1 - (ts.embedding <=> query_embedding) as similarity
+FROM transcript_segments ts
+WHERE ts.embedding <=> query_embedding < 0.5
+UNION ALL
+SELECT 
+  'frame' as type,
+  f.t_frame as t_start,
+  f.t_frame as t_end,
+  fc.caption as content,
+  1 - (fc.embedding <=> query_embedding) as similarity
+FROM frame_captions fc
+JOIN frames f ON fc.frame_id = f.id
+WHERE fc.embedding <=> query_embedding < 0.5
+ORDER BY similarity DESC
+LIMIT 20;
 ```
 
 ### HNSW Indexes

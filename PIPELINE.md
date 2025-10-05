@@ -107,19 +107,22 @@ Detect scene boundaries using PySceneDetect for intelligent frame extraction.
 
 ### Inputs
 - **File**: `processed/{video_id}/normalized.mp4`
-- **Library**: PySceneDetect 0.5.6
+- **Library**: PySceneDetect 0.6.7+ (new API)
 
 ### Processing
 ```python
-# PySceneDetect scene detection
-video_manager = VideoManager([video_path])
+# PySceneDetect 0.6.7+ scene detection (new API)
+from scenedetect import open_video, SceneManager
+from scenedetect.detectors import AdaptiveDetector
+
+# Open video with new API
+video = open_video(video_path)
 scene_manager = SceneManager()
 scene_manager.add_detector(AdaptiveDetector())
 
 # Detect scenes
-video_manager.start()
-scene_manager.detect_scenes(video=video_manager)
-video_manager.release()
+scene_manager.detect_scenes(video)
+scene_list = scene_manager.get_scene_list()
 ```
 
 ### Outputs
@@ -211,18 +214,30 @@ Analyze frames with GPT-4o Vision to extract captions, controls, and text.
 
 ### Processing
 ```python
-# GPT-4o Vision API call
-response = openai.ChatCompletion.create(
-    model="gpt-4o",
-    messages=[{
-        "role": "user",
-        "content": [
-            {"type": "text", "text": "Analyze this frame..."},
-            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
-        ]
-    }],
-    response_format={"type": "json_schema", "json_schema": vision_schema}
-)
+# Parallel GPT-4o Vision API calls with semaphore
+import asyncio
+from asyncio import Semaphore
+
+async def analyze_frame_with_vision_async(frame_path, semaphore):
+    async with semaphore:
+        # GPT-4o Vision API call with structured output
+        response = await openai.ChatCompletion.acreate(
+            model="gpt-4o",
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Analyze this frame..."},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+                ]
+            }],
+            response_format={"type": "json_schema", "json_schema": vision_schema}
+        )
+        return response
+
+# Process frames in parallel
+semaphore = Semaphore(VISION_MAX_CONCURRENT)
+tasks = [analyze_frame_with_vision_async(frame, semaphore) for frame in frames]
+results = await asyncio.gather(*tasks)
 ```
 
 ### Outputs
@@ -239,17 +254,29 @@ response = openai.ChatCompletion.create(
 - **Database**: Write access to frame_captions
 
 ### Performance
-- **Time**: 15 seconds - 5 minutes (depends on number of frames)
-- **API Calls**: 1 per frame
+- **Time**: 8 seconds - 2 minutes (parallel processing, 3-5x improvement)
+- **API Calls**: Concurrent requests with semaphore limiting
 - **Cost**: ~$0.01 per frame
-- **Rate Limits**: 10 requests per minute
+- **Rate Limits**: Configurable concurrency (default: 5 concurrent)
+- **Fallback**: Sequential processing if parallel fails
 
 ### Structured Output Schema
 ```json
 {
   "caption": "string",
-  "controls": ["button", "slider", "knob"],
-  "text_on_screen": ["text1", "text2"]
+  "controls": [
+    {
+      "type": "button",
+      "label": "Start",
+      "position": "center"
+    }
+  ],
+  "text_on_screen": [
+    {
+      "text": "Welcome to the tutorial",
+      "position": "top-left"
+    }
+  ]
 }
 ```
 
